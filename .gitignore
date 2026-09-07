@@ -12,6 +12,9 @@ data/processed/*
 *.csv
 *.parquet
 
+# Model-comparison summaries are intentional versioned report artifacts.
+!reports/model_comparison/*.csv
+
 # ==============================
 # TRAINED MODELS
 # ==============================

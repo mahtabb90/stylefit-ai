@@ -10,7 +10,7 @@ Provides train-fitted Scikit-Learn ColumnTransformer builders supporting:
   - Configurable numeric feature scaling ('scale_numeric=True' vs 'scale_numeric=False')
 """
 
-from typing import List, Literal, Optional, Tuple, Union
+from typing import Any, List, Literal, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -70,6 +70,7 @@ def build_preprocessor(
     scale_numeric: bool = True,
     size_strategy: Literal["numeric", "categorical"] = "numeric",
     min_frequency: Union[int, float] = 100,
+    sparse_output: bool = False,
 ) -> ColumnTransformer:
     """Build stateful ColumnTransformer for General Fit Model features.
 
@@ -80,6 +81,8 @@ def build_preprocessor(
                              'categorical' treats size as categorical string feature.
         min_frequency (int | float): Frequency threshold for rare category grouping in OneHotEncoder,
                                      learned strictly from X_train.
+        sparse_output (bool): Return sparse one-hot features when possible. The
+                              default remains dense for backward compatibility.
 
     Returns:
         ColumnTransformer: Configured Scikit-Learn transformer ready to be fit on X_train.
@@ -144,7 +147,7 @@ def build_preprocessor(
                 OneHotEncoder(
                     min_frequency=min_frequency,
                     handle_unknown="infrequent_if_exist",
-                    sparse_output=False,
+                    sparse_output=sparse_output,
                 ),
             ),
         ]
