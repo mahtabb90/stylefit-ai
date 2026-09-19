@@ -77,3 +77,13 @@ Thumbs.db
 *.log
 mlruns/
 wandb/
+
+# ==============================
+# CATBOOST RUNTIME ARTIFACTS
+# ==============================
+
+# catboost_info/ is created automatically by CatBoost during training.
+# It contains training logs and TSV files that are not project artifacts.
+# Source code uses allow_writing_files=False to prevent creation, but
+# this pattern ensures they are never accidentally committed if created.
+catboost_info/
