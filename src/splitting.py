@@ -7,11 +7,53 @@ Provides functions for:
   - Verification of split integrity (zero user overlap, row totals, target distributions).
 """
 
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import StratifiedGroupKFold, train_test_split
+
+
+def make_group_cv_splits(
+    X: pd.DataFrame,
+    y: pd.Series,
+    groups: Sequence,
+    n_splits: int = 3,
+    random_state: int = 42,
+) -> List[Tuple[np.ndarray, np.ndarray]]:
+    """Create deterministic, stratified, user-disjoint CV folds.
+
+    The returned positional indices can be reused for every candidate model,
+    ensuring a fair comparison on identical validation rows.
+    """
+    if not (len(X) == len(y) == len(groups)):
+        raise ValueError("X, y, and groups must contain the same number of rows.")
+    if n_splits < 2:
+        raise ValueError("n_splits must be at least 2.")
+    if pd.Series(groups).nunique() < n_splits:
+        raise ValueError("The number of unique groups must be at least n_splits.")
+
+    splitter = StratifiedGroupKFold(
+        n_splits=n_splits,
+        shuffle=True,
+        random_state=random_state,
+    )
+    splits = list(splitter.split(X, y, groups=groups))
+
+    group_array = np.asarray(groups)
+    expected_classes = set(pd.Series(y).unique())
+    for fold_number, (train_idx, validation_idx) in enumerate(splits, start=1):
+        overlap = set(group_array[train_idx]).intersection(group_array[validation_idx])
+        if overlap:
+            raise RuntimeError(f"Group leakage detected in CV fold {fold_number}.")
+        validation_classes = set(pd.Series(y).iloc[validation_idx].unique())
+        if validation_classes != expected_classes:
+            raise ValueError(
+                f"CV fold {fold_number} does not contain every target class: "
+                f"{sorted(validation_classes)}."
+            )
+
+    return splits
 
 
 def stratified_random_split(

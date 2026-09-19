@@ -203,13 +203,14 @@ def evaluate_baseline_model(
     split_type: str,
     preprocessor: Optional[Any] = None,
     target_order: List[str] = CLASS_ORDER,
+    sample_weight: Optional[np.ndarray] = None,
 ) -> Dict[str, Any]:
     """Execute complete evaluation workflow for a baseline model.
 
     Workflow:
       1. Fit preprocessor ONLY on X_train (if preprocessor provided).
       2. Transform X_train and X_test.
-      3. Fit model on transformed X_train and y_train.
+      3. Fit model on transformed X_train and y_train, optionally with sample weights.
       4. Generate predictions and probability outputs on transformed X_test.
       5. Align probability columns using model.classes_.
       6. Compute overall metrics, per-class metrics, confusion matrices, and probability metrics.
@@ -225,7 +226,8 @@ def evaluate_baseline_model(
         X_te_proc = X_test
 
     # Fit model on training data
-    model.fit(X_tr_proc, y_train)
+    fit_kwargs = {"sample_weight": sample_weight} if sample_weight is not None else {}
+    model.fit(X_tr_proc, y_train, **fit_kwargs)
 
     # Predict on test data
     y_pred = model.predict(X_te_proc)
@@ -233,32 +235,60 @@ def evaluate_baseline_model(
     # Extract & align probabilities if supported
     has_proba = hasattr(model, "predict_proba")
     aligned_proba = None
-    prob_metrics = None
-
     if has_proba:
         raw_proba = model.predict_proba(X_te_proc)
         model_classes = getattr(model, "classes_", target_order)
         aligned_proba = align_probability_columns(
             raw_proba, model_classes, target_order
         )
-        prob_metrics = compute_probability_metrics(y_test, aligned_proba, target_order)
 
-    overall = compute_overall_metrics(y_test, y_pred, target_order)
-    per_class = compute_per_class_metrics(y_test, y_pred, target_order)
-    raw_cm, norm_cm = compute_confusion_matrices(y_test, y_pred, target_order)
+    evaluated = evaluate_predictions(
+        y_true=y_test,
+        y_pred=y_pred,
+        aligned_proba=aligned_proba,
+        model_name=model_name,
+        split_type=split_type,
+        target_order=target_order,
+    )
+    return {
+        **evaluated,
+        "model": model,
+        "preprocessor": preprocessor,
+    }
+
+
+def evaluate_predictions(
+    y_true: Union[pd.Series, np.ndarray],
+    y_pred: Union[pd.Series, np.ndarray],
+    aligned_proba: Optional[np.ndarray],
+    model_name: str,
+    split_type: str,
+    target_order: List[str] = CLASS_ORDER,
+) -> Dict[str, Any]:
+    """Evaluate predictions through the project's shared metric contract.
+
+    Keeping this logic independent of fitting lets cross-validation reuse a
+    fold-fitted preprocessor across models with the same feature strategy.
+    """
+    overall = compute_overall_metrics(y_true, y_pred, target_order)
+    per_class = compute_per_class_metrics(y_true, y_pred, target_order)
+    raw_cm, norm_cm = compute_confusion_matrices(y_true, y_pred, target_order)
+    probability_metrics = None
+    if aligned_proba is not None:
+        probability_metrics = compute_probability_metrics(
+            y_true, aligned_proba, target_order
+        )
 
     return {
         "model_name": model_name,
         "split_type": split_type,
-        "model": model,
-        "preprocessor": preprocessor,
         "overall": overall,
         "per_class": per_class,
         "confusion_matrix": raw_cm,
         "normalized_confusion_matrix": norm_cm,
-        "probability_metrics": prob_metrics,
+        "probability_metrics": probability_metrics,
         "aligned_proba": aligned_proba,
-        "y_true": y_test,
+        "y_true": y_true,
         "y_pred": y_pred,
     }
 
